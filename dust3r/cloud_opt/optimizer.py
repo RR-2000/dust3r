@@ -29,7 +29,7 @@ class PointCloudOptimizer(BasePCOptimizer):
         self.im_depthmaps = nn.ParameterList(torch.randn(H, W)/10-3 for H, W in self.imshapes)  # log(depth)
         self.im_poses = nn.ParameterList(self.rand_pose(self.POSE_DIM) for _ in range(self.n_imgs))  # camera poses
         self.im_focals = nn.ParameterList(torch.FloatTensor(
-            [self.focal_break*np.log(max(H, W))]) for H, W in self.imshapes)  # camera intrinsics
+            [self.focal_break*np.log(W), self.focal_break*np.log(H)]  ) for H, W in self.imshapes)  # camera intrinsics
         self.im_pp = nn.ParameterList(torch.zeros((2,)) for _ in range(self.n_imgs))  # camera intrinsics
         self.im_pp.requires_grad_(optimize_pp)
 
@@ -143,8 +143,9 @@ class PointCloudOptimizer(BasePCOptimizer):
 
     def get_intrinsics(self):
         K = torch.zeros((self.n_imgs, 3, 3), device=self.device)
-        focals = self.get_focals().flatten()
-        K[:, 0, 0] = K[:, 1, 1] = focals
+        focals = self.get_focals()
+        K[:, 0, 0] = focals[:,0]
+        K[:, 1, 1] = focals[:,1]
         K[:, :2, 2] = self.get_principal_points()
         K[:, 2, 2] = 1
         return K
@@ -204,7 +205,7 @@ class PointCloudOptimizer(BasePCOptimizer):
 def _fast_depthmap_to_pts3d(depth, pixel_grid, focal, pp):
     pp = pp.unsqueeze(1)
     focal = focal.unsqueeze(1)
-    assert focal.shape == (len(depth), 1, 1)
+    assert focal.shape == (len(depth), 1, 2)
     assert pp.shape == (len(depth), 1, 2)
     assert pixel_grid.shape == depth.shape + (2,)
     depth = depth.unsqueeze(-1)
